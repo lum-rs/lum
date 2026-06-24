@@ -1,0 +1,20 @@
+[package]
+name = "lum_event"
+description = "lum framework's event library"
+readme = "README.md"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+exclude.workspace = true
+
+[dependencies]
+lum_boxtypes = { workspace = true }
+lum_log = { workspace = true }
+dashmap = { workspace = true }
+parking_lot = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }

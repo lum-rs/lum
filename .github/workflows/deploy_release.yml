@@ -1,0 +1,123 @@
+name: Publish release
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  check_version_bump:
+    name: Check version bump
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6
+      - name: Update cargo index
+        run: cargo search
+      - name: Install git-cliff
+        run: cargo install git-cliff
+      - name: Get crate name
+        id: crate_name
+        run: echo "crate_name=$(cargo read-manifest | jq -r .name)" >> $GITHUB_OUTPUT
+      - name: Get bumped version
+        id: bumped_version
+        run: echo "bumped_version=$(git cliff --bumped-version | sed 's/^v//')" >> $GITHUB_OUTPUT
+      - name: Read crates.io version
+        id: crates_io_version
+        run: |
+          crate_name="${{ steps.crate_name.outputs.crate_name }}"
+          echo "version=$(cargo search --limit 1 "$crate_name" | grep -oP '(?<=")([0-9]+.[0-9]+.[0-9]+)(?=")')" >> $GITHUB_OUTPUT
+      - name: Parse and compare versions
+        run: |
+          source_version="${{ steps.bumped_version.outputs.bumped_version }}"
+          crates_io_version="${{ steps.crates_io_version.outputs.version }}"
+          if [ "$(printf '%s\n' "$crates_io_version" "$source_version" | sort -V | head -n1)" != "$source_version" ]; then
+            echo "Source branch version ($source_version) is higher than crates.io version ($crates_io_version)."
+          else
+            echo "Source branch version ($source_version) is not higher than crates.io version ($crates_io_version)."
+            exit 1
+          fi
+  bump_version:
+    name: Bump version
+    needs: check_version_bump
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Git user
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@users.noreply.github.com"
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6
+      - name: Install git-cliff
+        run: cargo install git-cliff
+      - name: Install cargo-edit
+        run: cargo install cargo-edit
+      - name: Get current version
+        id: current_version
+        run: echo "current_version=$(cargo read-manifest | jq -r .version)" >> $GITHUB_OUTPUT
+      - name: Get bumped version
+        id: bumped_version
+        run: echo "bumped_version=$(git cliff --bumped-version | sed 's/^v//')" >> $GITHUB_OUTPUT
+      - name: Bump version in Cargo.toml
+        run: cargo set-version "${{ steps.bumped_version.outputs.bumped_version }}"
+      - name: Build to apply changes to Cargo.lock
+        run: cargo build --release --all-features
+      - name: Stage, commit, tag and push version bump
+        env:
+          CURRENT_VERSION: ${{ steps.current_version.outputs.current_version }}
+          BUMPED_VERSION: ${{ steps.bumped_version.outputs.bumped_version }}
+        run: |
+          git add Cargo.toml Cargo.lock
+          git commit -m "bump(Cargo.toml): version $CURRENT_VERSION -> $BUMPED_VERSION"
+          git tag "$BUMPED_VERSION" -m "Release $BUMPED_VERSION"
+          git push origin main --tags
+  crates_io:
+    name: Publish crates.io
+    needs: bump_version
+    environment: CRATES_IO
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: main
+      - name: Setup Rust toolchain for ubuntu-latest
+        uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6
+      - name: Package
+        run: cargo package --all-features
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        run: cargo publish
+  github:
+    name: Publish GitHub
+    needs: crates_io
+    permissions:
+      contents: write
+    environment: GITHUB_RELEASE
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: main
+      - name: Setup Rust toolchain for ubuntu-latest
+        uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6
+      - name: Package
+        run: cargo package --all-features
+      - name: Read crate name
+        id: crate_name
+        run: echo "crate_name=$(cargo read-manifest | jq -r .name)" >> $GITHUB_OUTPUT
+      - name: Read version
+        id: version
+        run: echo "version=$(cargo read-manifest | jq -r .version)" >> $GITHUB_OUTPUT
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Provided by GitHub Actions
+        run: gh release create "${{ steps.version.outputs.version }}" --repo="$GITHUB_REPOSITORY" --title="Release ${{ steps.version.outputs.version }}" --generate-notes --latest "./target/package/${{ steps.crate_name.outputs.crate_name }}-${{ steps.version.outputs.version }}.crate"

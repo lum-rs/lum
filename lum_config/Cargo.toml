@@ -1,0 +1,22 @@
+[package]
+name = "lum_config"
+readme = "README.md"
+description = "lum framework's config library"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+exclude.workspace = true
+
+[dependencies]
+dirs = { workspace = true }
+serde = { workspace = true }
+serde-env = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+uuid = { workspace = true }

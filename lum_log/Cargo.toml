@@ -1,0 +1,18 @@
+[package]
+name = "lum_log"
+readme = "README.md"
+description = "lum framework's logging library"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+exclude.workspace = true
+
+[dependencies]
+log = { workspace = true }
+log4rs = { workspace = true }
+parking_lot = { workspace = true }
+thiserror = { workspace = true }

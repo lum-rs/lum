@@ -1,0 +1,14 @@
+[package]
+name = "lum_boxtypes"
+readme = "README.md"
+description = "lum framework's box types library"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+exclude.workspace = true
+
+[dependencies]

@@ -1,0 +1,54 @@
+[workspace]
+resolver = "3"
+members = [
+    "lum_boxtypes",
+    "lum_config",
+    "lum_event",
+    "lum_log",
+    "lum_service"
+]
+
+[workspace.package]
+version = "0.4.0"
+authors = ["Torben Schweren"]
+edition = "2024"
+rust-version = "1.88.0"
+readme = "README.md"
+repository = "https://github.com/lum-rs/lum"
+license = "MIT"
+keywords = ["lum", "bot", "framework"]
+exclude = [".devcontainer", ".github", ".vscode"]
+
+[profile.release]
+debug = false
+opt-level = 3
+lto = true
+
+[profile.dev]
+debug = true
+opt-level = 0
+lto = false
+
+[workspace.dependencies]
+# Internal crates (keep versions in sync with workspace.package.version)
+lum_boxtypes = { path = "lum_boxtypes", version = "0.4.0" }
+lum_event = { path = "lum_event", version = "0.4.0" }
+lum_log = { path = "lum_log", version = "0.4.0" }
+
+# External dependencies
+thiserror = "2.0.18"
+async-trait = "0.1.89"
+dashmap = { version = "6.2.1", features = ["serde"] }
+dirs = "6.0.0"
+downcast-rs = { version = "2.0.2", features = ["std"] }
+humantime = "2.3.0"
+log = { version = "0.4.32", features = ["serde", "std"] }
+log4rs = { version = "1.4.0", features = ["all_components", "background_rotation", "compound_policy", "config_parsing", "console_appender", "delete_roller", "file_appender", "fixed_window_roller", "gzip", "json_encoder", "onstartup_trigger", "pattern_encoder", "rolling_file_appender", "size_trigger", "threshold_filter", "time_trigger", "yaml_format"] }
+parking_lot = { version = "0.12.5", features = ["hardware-lock-elision", "send_guard"] }
+rustls = "0.23.41"
+serde = { version = "1.0.228", features = ["derive"] }
+serde-env = "0.3.0"
+serde_json = "1.0.150"
+serenity = { version = "0.12.5", features = ["full"] }
+tokio = { version = "1.52.3", features = ["full"] }
+uuid = { version = "1.23.3", features = ["v4", "fast-rng", "serde", "macro-diagnostics"] }

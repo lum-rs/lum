@@ -1,0 +1,22 @@
+[package]
+name = "lum_service"
+readme = "README.md"
+description = "lum framework's service library"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+exclude.workspace = true
+
+[dependencies]
+lum_boxtypes = { workspace = true }
+lum_event = { workspace = true }
+lum_log = { workspace = true }
+async-trait = { workspace = true }
+dashmap = { workspace = true }
+downcast-rs = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
