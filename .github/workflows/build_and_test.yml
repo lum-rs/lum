@@ -23,6 +23,6 @@ jobs:
       - name: Set up Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6
       - name: Build
-        run: cargo build --release --all-features
+        run: cargo build --release --workspace --all-features
       - name: Test
-        run: cargo test --release --all-features
+        run: cargo test --release --workspace --all-features

@@ -18,17 +18,12 @@ jobs:
         run: cargo search
       - name: Install git-cliff
         run: cargo install git-cliff
-      - name: Get crate name
-        id: crate_name
-        run: echo "crate_name=$(cargo read-manifest | jq -r .name)" >> $GITHUB_OUTPUT
       - name: Get bumped version
         id: bumped_version
         run: echo "bumped_version=$(git cliff --bumped-version | sed 's/^v//')" >> $GITHUB_OUTPUT
       - name: Read crates.io version
         id: crates_io_version
-        run: |
-          crate_name="${{ steps.crate_name.outputs.crate_name }}"
-          echo "version=$(cargo search --limit 1 "$crate_name" | grep -oP '(?<=")([0-9]+.[0-9]+.[0-9]+)(?=")')" >> $GITHUB_OUTPUT
+        run: echo "version=$(cargo search --limit 1 lum_boxtypes | grep -oP '(?<=")([0-9]+.[0-9]+.[0-9]+)(?=")')" >> $GITHUB_OUTPUT
       - name: Parse and compare versions
         run: |
           source_version="${{ steps.bumped_version.outputs.bumped_version }}"
@@ -60,14 +55,21 @@ jobs:
         run: cargo install cargo-edit
       - name: Get current version
         id: current_version
-        run: echo "current_version=$(cargo read-manifest | jq -r .version)" >> $GITHUB_OUTPUT
+        run: echo "current_version=$(grep '^version' Cargo.toml | head -1 | grep -oP '[\d.]+')" >> $GITHUB_OUTPUT
       - name: Get bumped version
         id: bumped_version
         run: echo "bumped_version=$(git cliff --bumped-version | sed 's/^v//')" >> $GITHUB_OUTPUT
       - name: Bump version in Cargo.toml
-        run: cargo set-version "${{ steps.bumped_version.outputs.bumped_version }}"
+        run: cargo set-version --workspace "${{ steps.bumped_version.outputs.bumped_version }}"
+      - name: Update internal crate version constraints
+        env:
+          BUMPED_VERSION: ${{ steps.bumped_version.outputs.bumped_version }}
+        run: |
+          for crate in lum_boxtypes lum_event lum_log; do
+            sed -i "s/\($crate.*version = \)\"[^\"]*\"/\1\"$BUMPED_VERSION\"/" Cargo.toml
+          done
       - name: Build to apply changes to Cargo.lock
-        run: cargo build --release --all-features
+        run: cargo build --release --workspace
       - name: Stage, commit, tag and push version bump
         env:
           CURRENT_VERSION: ${{ steps.current_version.outputs.current_version }}
@@ -87,14 +89,12 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           ref: main
-      - name: Setup Rust toolchain for ubuntu-latest
+      - name: Setup Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6
-      - name: Package
-        run: cargo package --all-features
       - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
-        run: cargo publish
+        run: cargo publish --workspace
   github:
     name: Publish GitHub
     needs: crates_io
@@ -107,17 +107,14 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           ref: main
-      - name: Setup Rust toolchain for ubuntu-latest
+      - name: Setup Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6
       - name: Package
-        run: cargo package --all-features
-      - name: Read crate name
-        id: crate_name
-        run: echo "crate_name=$(cargo read-manifest | jq -r .name)" >> $GITHUB_OUTPUT
+        run: cargo package --workspace
       - name: Read version
         id: version
-        run: echo "version=$(cargo read-manifest | jq -r .version)" >> $GITHUB_OUTPUT
+        run: echo "version=$(grep '^version' Cargo.toml | head -1 | grep -oP '[\d.]+')" >> $GITHUB_OUTPUT
       - name: Create release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Provided by GitHub Actions
-        run: gh release create "${{ steps.version.outputs.version }}" --repo="$GITHUB_REPOSITORY" --title="Release ${{ steps.version.outputs.version }}" --generate-notes --latest "./target/package/${{ steps.crate_name.outputs.crate_name }}-${{ steps.version.outputs.version }}.crate"
+        run: gh release create "${{ steps.version.outputs.version }}" --repo="$GITHUB_REPOSITORY" --title="Release ${{ steps.version.outputs.version }}" --generate-notes --latest ./target/package/*.crate
