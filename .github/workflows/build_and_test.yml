@@ -1,0 +1,28 @@
+name: Build and test
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  build_and_test:
+    name: Build and test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        env: [ubuntu-64, macos-64, windows-64]
+        include:
+          - env: ubuntu-64
+            os: ubuntu-latest
+          - env: macos-64
+            os: macos-latest
+          - env: windows-64
+            os: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - name: Set up Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6
+      - name: Build
+        run: cargo build --release --all-features
+      - name: Test
+        run: cargo test --release --all-features
