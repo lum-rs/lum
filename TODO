@@ -5,3 +5,4 @@
 - ci/cd variables for publishing to crates.io
 - remove crate-level dependencies in lum crate
 - remove #[allow(deprecated)] in lum crate
+- workflow: changelog.md file + release notes
