@@ -61,13 +61,6 @@ jobs:
         run: echo "bumped_version=$(git cliff --bumped-version | sed 's/^v//')" >> $GITHUB_OUTPUT
       - name: Bump version in Cargo.toml
         run: cargo set-version --workspace "${{ steps.bumped_version.outputs.bumped_version }}"
-      - name: Update internal crate version constraints
-        env:
-          BUMPED_VERSION: ${{ steps.bumped_version.outputs.bumped_version }}
-        run: |
-          for crate in lum_boxtypes lum_event lum_log; do
-            sed -i "s/\($crate.*version = \)\"[^\"]*\"/\1\"$BUMPED_VERSION\"/" Cargo.toml
-          done
       - name: Build to apply changes to Cargo.lock
         run: cargo build --release --workspace
       - name: Stage, commit, tag and push version bump
