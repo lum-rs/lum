@@ -10,7 +10,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.4.0"
+version = "0.3.0"
 authors = ["Torben Schweren"]
 edition = "2024"
 rust-version = "1.88.0"
@@ -32,9 +32,9 @@ lto = false
 
 [workspace.dependencies]
 # Internal crates (keep versions in sync with workspace.package.version)
-lum_boxtypes = { path = "lum_boxtypes", version = "0.4.0" }
-lum_event = { path = "lum_event", version = "0.4.0" }
-lum_log = { path = "lum_log", version = "0.4.0" }
+lum_boxtypes = { path = "lum_boxtypes", version = "0.3.0" }
+lum_event = { path = "lum_event", version = "0.3.0" }
+lum_log = { path = "lum_log", version = "0.3.0" }
 
 # External dependencies
 thiserror = "2.0.18"
