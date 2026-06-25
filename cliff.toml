@@ -39,16 +39,17 @@ topo_order_commits = true
 sort_commits = "oldest"
 recurse_submodules = false
 commit_parsers = [
-    { message = "^[aA]dd", group = "<!-- 000 -->🚀 Features" },
-    { message = "^[fF]eat", group = "<!-- 000 -->🚀 Features" },
     { message = "^[bB]uild\\(deps\\)", group = "<!-- 010 -->⬆️ Dependency Updates" },
     { message = "^[fF]ix\\(deps\\)", group = "<!-- 010 -->⬆️ Dependency Updates" },
     { message = "^[cC]ore\\(deps\\)", group = "<!-- 010 -->⬆️ Dependency Updates" },
-    { message = "^[fF]ix", group = "<!-- 001 -->🐛 Bug Fixes" },
-    { message = "^[rR]efactor", group = "<!-- 002 -->♻️ Refactor" },
-    { message = "^[tT]est(ing)?", group = "<!-- 003 -->🧪 Testing" },
-    { message = "^[rR]evert", group = "<!-- 004 -->◀️ Revert" },
-    { message = "^(([cC][iI][cC][dD])|([cC][iI])|([cC][dD]))", group = "<!-- 005 -->🚀 CI/CD" },
-    { message = "^[dD]oc(s?)", group = "<!-- 006 -->📚 Documentation" },
+    { message = "^[aA]dd(ed)?", group = "<!-- 000 -->🚀 Features" },
+    { message = "^[fF]eat(ure)?", group = "<!-- 000 -->🚀 Features" },
+    { message = "^[rR]emove(d)?", group = "<!-- 001 -->🗑️ Removal" },
+    { message = "^[rR]efactor(ed)?", group = "<!-- 002 -->♻️ Refactor" },
+    { message = "^[fF]ix(ed)?", group = "<!-- 003 -->🐛 Bug Fixes" },
+    { message = "^[tT]est(ed)?", group = "<!-- 004 -->🧪 Testing" },
+    { message = "^[rR]evert(ed)?", group = "<!-- 005 -->◀️ Revert" },
+    { message = "^(([cC][iI][cC][dD])|([cC][iI])|([cC][dD]))", group = "<!-- 006 -->🚀 CI/CD" },
+    { message = "^[dD]oc(s?)", group = "<!-- 007 -->📚 Documentation" },
     { message = ".*", group = "<!-- 099 -->⚙️ Other" },
 ]
