@@ -1,0 +1,8 @@
+# TODO
+
+- add lum project
+- refactor workflow to compare against lum crate version
+- ci/cd variables for publishing to crates.io
+- remove temporary git cliff version override
+- remove crate-level dependencies in lum crate
+- remove #[allow(deprecated)] in lum crate

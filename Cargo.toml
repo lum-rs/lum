@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "lum",
     "lum_boxtypes",
     "lum_config",
     "lum_event",

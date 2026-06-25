@@ -1,0 +1,28 @@
+[package]
+name = "lum"
+description = "Lum Discord Bot"
+readme = "README.md"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+exclude.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+dirs.workspace = true
+downcast-rs.workspace = true
+fern = { version = "0.7.0", features = ["chrono", "colored", "date-based"] }
+humantime.workspace = true
+log.workspace = true
+serde.workspace = true
+serde-env.workspace = true
+serde_json.workspace = true
+serenity.workspace = true
+sqlx = { version = "0.8.0", features = ["runtime-tokio", "any", "postgres", "mysql", "sqlite", "tls-native-tls", "migrate", "macros", "uuid", "chrono", "json"] }
+thiserror.workspace = true
+tokio.workspace = true
+uuid.workspace = true
