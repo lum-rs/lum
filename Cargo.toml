@@ -42,6 +42,7 @@ async-trait = "0.1.89"
 dashmap = { version = "6.2.1", features = ["serde"] }
 dirs = "6.0.0"
 downcast-rs = { version = "2.0.2", features = ["std"] }
+fern = { version = "0.7.0", features = ["chrono", "colored", "date-based"] }
 humantime = "2.3.0"
 log = { version = "0.4.32", features = ["serde", "std"] }
 log4rs = { version = "1.4.0", features = ["all_components", "background_rotation", "compound_policy", "config_parsing", "console_appender", "delete_roller", "file_appender", "fixed_window_roller", "gzip", "json_encoder", "onstartup_trigger", "pattern_encoder", "rolling_file_appender", "size_trigger", "threshold_filter", "time_trigger", "yaml_format"] }
@@ -51,5 +52,6 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde-env = "0.3.0"
 serde_json = "1.0.150"
 serenity = { version = "0.12.5", features = ["full"] }
+sqlx = { version = "0.8.0", features = ["runtime-tokio", "any", "postgres", "mysql", "sqlite", "tls-native-tls", "migrate", "macros", "uuid", "chrono", "json"] }
 tokio = { version = "1.52.3", features = ["full"] }
 uuid = { version = "1.23.3", features = ["v4", "fast-rng", "serde", "macro-diagnostics"] }
