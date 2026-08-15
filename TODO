@@ -1,6 +1,5 @@
 # TODO
 
 - add lum project (on github)
-- ci/cd variables for publishing to crates.io
 - remove #[allow(deprecated)] in lum crate
 - workflow: changelog.md file + release notes
