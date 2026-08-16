@@ -2,4 +2,3 @@
 
 - add lum project (on github)
 - remove #[allow(deprecated)] in lum crate
-- workflow: changelog.md file + release notes
