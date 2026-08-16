@@ -23,7 +23,7 @@ jobs:
         run: echo "bumped_version=$(git cliff --bumped-version | sed 's/^v//')" >> $GITHUB_OUTPUT
       - name: Read crates.io version
         id: crates_io_version
-        run: echo "version=$(cargo search --limit 1 lum_boxtypes | grep -oP '(?<=")([0-9]+.[0-9]+.[0-9]+)(?=")')" >> $GITHUB_OUTPUT
+        run: echo "version=$(cargo search --limit 1 lum | grep -oP '(?<=")([0-9]+.[0-9]+.[0-9]+)(?=")')" >> $GITHUB_OUTPUT
       - name: Parse and compare versions
         run: |
           source_version="${{ steps.bumped_version.outputs.bumped_version }}"
@@ -59,6 +59,8 @@ jobs:
       - name: Get bumped version
         id: bumped_version
         run: echo "bumped_version=$(git cliff --bumped-version | sed 's/^v//')" >> $GITHUB_OUTPUT
+      - name: Generate changelog
+        run: git cliff --bump -o CHANGELOG.md
       - name: Bump version in Cargo.toml
         run: cargo set-version --workspace "${{ steps.bumped_version.outputs.bumped_version }}"
       - name: Build to apply changes to Cargo.lock
@@ -68,7 +70,7 @@ jobs:
           CURRENT_VERSION: ${{ steps.current_version.outputs.current_version }}
           BUMPED_VERSION: ${{ steps.bumped_version.outputs.bumped_version }}
         run: |
-          git add Cargo.toml Cargo.lock
+          git add Cargo.toml Cargo.lock CHANGELOG.md
           git commit -m "bump(Cargo.toml): version $CURRENT_VERSION -> $BUMPED_VERSION"
           git tag "$BUMPED_VERSION" -m "Release $BUMPED_VERSION"
           git push origin main --tags
