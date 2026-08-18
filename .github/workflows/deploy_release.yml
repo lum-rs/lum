@@ -63,6 +63,12 @@ jobs:
         run: git cliff --bump -o CHANGELOG.md
       - name: Bump version in Cargo.toml
         run: cargo set-version --workspace "${{ steps.bumped_version.outputs.bumped_version }}"
+      - name: Keep lum_boxtypes version in sync with workspace version
+        run: cargo set-version -p lum_boxtypes "${{ steps.bumped_version.outputs.bumped_version }}"
+      - name: Keep lum_event version in sync with workspace version
+        run: cargo set-version -p lum_event "${{ steps.bumped_version.outputs.bumped_version }}"
+      - name: Keep lum_log version in sync with workspace version
+        run: cargo set-version -p lum_log "${{ steps.bumped_version.outputs.bumped_version }}"
       - name: Build to apply changes to Cargo.lock
         run: cargo build --release --workspace
       - name: Stage, commit, tag and push version bump
