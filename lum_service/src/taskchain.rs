@@ -3,7 +3,6 @@ use std::future::Future;
 
 use lum_boxtypes::LifetimedPinnedBoxedFuture;
 
-//TODO: Remove Sync bound
 pub struct Taskchain<'task, T: Send + 'task> {
     task: LifetimedPinnedBoxedFuture<'task, T>,
 }
