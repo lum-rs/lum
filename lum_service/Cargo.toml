@@ -18,5 +18,6 @@ lum_log = { workspace = true }
 async-trait = { workspace = true }
 dashmap = { workspace = true }
 downcast-rs = { workspace = true }
+dynosaur = { workspace = true }
 tokio = { workspace = true }
 thiserror = { workspace = true }
