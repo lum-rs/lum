@@ -1,8 +1,8 @@
+use dashmap::DashMap;
 use lum_boxtypes::{BoxedError, LifetimedPinnedBoxedFutureResult};
 use lum_event::EventRepeater;
-use dashmap::DashMap;
-use tokio::{spawn, sync::MutexGuard, task::JoinHandle, time::timeout};
 use lum_log::{error, error_panic, error_unreachable, info, warn};
+use tokio::{spawn, sync::MutexGuard, task::JoinHandle, time::timeout};
 
 use crate::{
     service::ServiceInfo,
@@ -11,7 +11,7 @@ use crate::{
 };
 
 use super::{
-    service::Service,
+    service::{DynService, Service},
     types::{Health, Priority, ShutdownError, StartupError, Status},
 };
 
@@ -33,6 +33,7 @@ pub struct ServiceManager {
 }
 
 impl ServiceManager {
+    //TODO: Do not take services on new(), add a manage(service: ServiceHandle) method instead
     pub async fn new(services: Vec<ServiceHandle>) -> Arc<Self> {
         let mut services_map: HashMap<TypeId, ServiceHandle> = HashMap::new(); //TODO: Drop type annotation
 
@@ -196,7 +197,7 @@ impl ServiceManager {
         results
     }
 
-    pub async fn get_service_by_type<T: Service>(&self) -> Option<ServiceHandle> {
+    pub async fn get_service_by_type<T: Service + 'static>(&self) -> Option<ServiceHandle> {
         for service in self.services.values() {
             let lock = service.lock().await;
             if lock.downcast_ref::<T>().is_some() {
@@ -236,7 +237,6 @@ impl ServiceManager {
         }
     }
 
-    //TODO: ServiceHandle type
     pub fn get_service(&self, type_id: &TypeId) -> Option<ServiceHandle> {
         self.services.get(type_id).map(Arc::clone)
     }
@@ -256,7 +256,7 @@ impl ServiceManager {
 
     pub fn has_background_tasks_by_mutex_guard(
         &self,
-        service: &MutexGuard<'_, dyn Service>,
+        service: &MutexGuard<'_, Box<DynService<'static>>>,
     ) -> bool {
         let type_id = service.info().type_id;
         self.has_background_tasks_by_type_id(&type_id)
@@ -372,7 +372,7 @@ impl ServiceManager {
 
     async fn init_service(
         &self,
-        service: &mut MutexGuard<'_, dyn Service>,
+        service: &mut MutexGuard<'_, Box<DynService<'static>>>,
     ) -> Result<(), StartupError> {
         let service_manager = self.get_weak();
 
@@ -417,7 +417,7 @@ impl ServiceManager {
 
     async fn shutdown_service(
         &self,
-        service: &mut MutexGuard<'_, dyn Service>,
+        service: &mut MutexGuard<'_, Box<DynService<'static>>>,
     ) -> Result<(), ShutdownError> {
         service.info_mut().status.set(Status::Stopping).await;
         self.abort_background_tasks(service).await;
@@ -471,7 +471,7 @@ impl ServiceManager {
 
     async fn fail_service_by_mutex_guard<IntoString: Into<String>>(
         &self,
-        service: &mut MutexGuard<'_, dyn Service>,
+        service: &mut MutexGuard<'_, Box<DynService<'static>>>,
         message: IntoString,
     ) {
         service.info_mut().status.set(Status::Failing).await;
@@ -558,7 +558,10 @@ impl ServiceManager {
         Ok(())
     }
 
-    async fn abort_background_tasks(&self, service_lock: &MutexGuard<'_, dyn Service>) {
+    async fn abort_background_tasks(
+        &self,
+        service_lock: &MutexGuard<'_, Box<DynService<'static>>>,
+    ) {
         let service_type_id = service_lock.info().type_id;
 
         if !self.has_background_tasks_by_type_id(&service_type_id) {

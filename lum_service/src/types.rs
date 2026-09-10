@@ -4,10 +4,10 @@ use std::{
 };
 
 use lum_event::event_repeater::{AttachError, DetachError};
-use tokio::sync::Mutex;
 use thiserror::Error;
+use tokio::sync::Mutex;
 
-use crate::service::Service;
+use crate::service::DynService;
 
 //TODO: Move types to their own files
 #[derive(Debug, Clone)]
@@ -131,4 +131,4 @@ pub enum RunTaskError {
     ServiceNotManaged(String, String),
 }
 
-pub type ServiceHandle = Arc<Mutex<dyn Service>>;
+pub type ServiceHandle = Arc<Mutex<Box<DynService<'static>>>>;
