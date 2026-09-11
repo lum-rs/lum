@@ -61,11 +61,6 @@ impl PartialOrd for ServiceInfo {
     }
 }
 
-// Note: `downcast_rs`'s `DowncastSync` can't be a supertrait of `Service` here: it requires
-// `Self: 'static` (via `Any`), but dynosaur's generated `DynService<'a>` is generic over an
-// arbitrary `'a`, so `DynService<'a>: DowncastSync` can never hold universally. Instead,
-// `as_any`/`as_any_mut` are plain trait methods implemented per concrete (always `'static`)
-// service type, and dynosaur simply forwards calls to them through the vtable.
 #[dynosaur(pub DynService = dyn(box) Service)]
 pub trait Service: Send + Sync {
     fn info(&self) -> &ServiceInfo;
