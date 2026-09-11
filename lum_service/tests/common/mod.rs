@@ -1,19 +1,18 @@
 use std::{
-    any::TypeId,
+    any::{Any, TypeId},
     sync::{Arc, Weak},
     time::Duration,
 };
 
-use lum_boxtypes::{BoxedError, PinnedBoxedFuture};
+use lum_boxtypes::BoxedError;
 use lum_event::Event;
-use async_trait::async_trait;
-use tokio::{sync::Mutex, time::sleep};
 use lum_log::info;
 use lum_service::{
-    service::{Service, ServiceInfo},
+    service::{DynService, Service, ServiceInfo},
     service_manager::ServiceManager,
     types::Priority,
 };
+use tokio::{sync::Mutex, time::sleep};
 
 pub struct DummyService {
     pub on_start: Event<()>,
@@ -39,7 +38,6 @@ impl DummyService {
     }
 }
 
-#[async_trait]
 impl Service for DummyService {
     fn info(&self) -> &ServiceInfo {
         &self.info
@@ -47,6 +45,14 @@ impl Service for DummyService {
 
     fn info_mut(&mut self) -> &mut ServiceInfo {
         &mut self.info
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 
     async fn start(&mut self, service_manager: Weak<ServiceManager>) -> Result<(), BoxedError> {
@@ -101,15 +107,15 @@ impl Service for DummyService {
         Ok(())
     }
 
-    fn fail(&mut self, message: &str) -> PinnedBoxedFuture<()> {
+    async fn fail(&mut self, message: &str) {
         info!("DummyService failed: {}", message);
-
-        Box::pin(async move {})
     }
 }
 
 pub async fn service_manager_with_dummy_service() -> Arc<ServiceManager> {
-    let services: Vec<Arc<Mutex<dyn Service>>> = vec![Arc::new(Mutex::new(DummyService::new()))];
+    let services: Vec<Arc<Mutex<Box<DynService<'static>>>>> = vec![Arc::new(Mutex::new(
+        DynService::new_box(DummyService::new()),
+    ))];
 
     ServiceManager::new(services).await
 }

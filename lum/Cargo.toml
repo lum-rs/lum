@@ -12,9 +12,9 @@ keywords.workspace = true
 exclude.workspace = true
 
 [dependencies]
-async-trait.workspace = true
+async-trait = "0.1.92"
 dirs.workspace = true
-downcast-rs.workspace = true
+downcast-rs = "2.0.2"
 fern.workspace = true
 humantime.workspace = true
 log.workspace = true

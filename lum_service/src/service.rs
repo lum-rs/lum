@@ -1,13 +1,13 @@
 use std::{
     any::{self, TypeId},
     cmp::Ordering,
+    future::Future,
     sync::Weak,
 };
 
-use lum_boxtypes::{BoxedError, PinnedBoxedFuture};
+use dynosaur::dynosaur;
+use lum_boxtypes::BoxedError;
 use lum_event::Observable;
-use async_trait::async_trait;
-use downcast_rs::{DowncastSync, impl_downcast};
 
 use super::{
     service_manager::ServiceManager,
@@ -61,18 +61,22 @@ impl PartialOrd for ServiceInfo {
     }
 }
 
-//TODO: When async fn is allowed in public traits, use dynosaur here instead of async_trait
-#[async_trait]
-pub trait Service: DowncastSync {
+#[dynosaur(pub DynService = dyn(box) Service)]
+pub trait Service: Send + Sync {
     fn info(&self) -> &ServiceInfo;
     fn info_mut(&mut self) -> &mut ServiceInfo;
 
-    async fn start(&mut self, service_manager: Weak<ServiceManager>) -> Result<(), BoxedError>;
-    async fn stop(&mut self) -> Result<(), BoxedError>;
+    fn as_any(&self) -> &dyn any::Any;
+    fn as_any_mut(&mut self) -> &mut dyn any::Any;
 
-    //Can't rely on async_trait here, as it returns a non-Sync Future.
-    fn fail(&mut self, _message: &str) -> PinnedBoxedFuture<()> {
-        Box::pin(async move {})
+    fn start(
+        &mut self,
+        service_manager: Weak<ServiceManager>,
+    ) -> impl Future<Output = Result<(), BoxedError>> + Send + '_;
+    fn stop(&mut self) -> impl Future<Output = Result<(), BoxedError>> + Send + '_;
+
+    fn fail(&mut self, _message: &str) -> impl Future<Output = ()> + Send {
+        async move {}
     }
 
     fn is_available(&self) -> bool {
@@ -80,23 +84,31 @@ pub trait Service: DowncastSync {
     }
 }
 
-impl_downcast!(sync Service);
+impl DynService<'_> {
+    pub fn downcast_ref<T: Service + 'static>(&self) -> Option<&T> {
+        self.as_any().downcast_ref::<T>()
+    }
 
-impl Eq for dyn Service {}
+    pub fn downcast_mut<T: Service + 'static>(&mut self) -> Option<&mut T> {
+        self.as_any_mut().downcast_mut::<T>()
+    }
+}
 
-impl PartialEq for dyn Service {
+impl Eq for DynService<'_> {}
+
+impl PartialEq for DynService<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.info() == other.info()
     }
 }
 
-impl Ord for dyn Service {
+impl Ord for DynService<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.info().cmp(other.info())
     }
 }
 
-impl PartialOrd for dyn Service {
+impl PartialOrd for DynService<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
