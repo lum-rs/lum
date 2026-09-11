@@ -4,7 +4,7 @@ use lum_event::{
     EventRepeater,
     event_repeater::{AttachError, DetachError},
 };
-use lum_log::{error, error_panic, error_unreachable, info, warn};
+use lum_log::{error, error_panic, info, warn};
 use thiserror::Error;
 use tokio::{
     spawn,
@@ -25,7 +25,7 @@ use std::{
     collections::HashMap,
     fmt::{self, Display},
     future::Future,
-    sync::{Arc, OnceLock, Weak},
+    sync::{Arc, Weak},
     time::Duration,
 };
 
@@ -65,6 +65,9 @@ pub enum StartupError {
 
     #[error("Service {0} ({1}) failed to start")]
     FailedToStartService(String, String),
+
+    #[error("The ServiceManager has been dropped")]
+    ServiceManagerDropped,
 }
 
 #[derive(Debug, Error)]
@@ -82,6 +85,9 @@ pub enum ShutdownError {
         "Failed to detach Service Manager's status_change EventRepeater from {0} ({1})'s status_change Event: {2}"
     )]
     StatusDetachmentFailed(String, String, DetachError),
+
+    #[error("The ServiceManager has been dropped")]
+    ServiceManagerDropped,
 }
 
 #[derive(Debug, Error)]
@@ -91,78 +97,30 @@ pub enum RunTaskError {
 
     #[error("Service {0} ({1}) is not managed by this Service Manager")]
     ServiceNotManaged(String, String),
+
+    #[error("The ServiceManager has been dropped")]
+    ServiceManagerDropped,
 }
 
-pub struct ServiceManager {
+#[derive(Debug, Error)]
+pub enum ServiceManagerHandleError {
+    #[error("The ServiceManager has been dropped.")]
+    ServiceManagerDropped,
+}
+
+pub struct ServiceManagerInner {
     pub services: HashMap<TypeId, ServiceHandle>,
     pub on_status_change: Arc<EventRepeater<Status>>,
 
-    weak: OnceLock<Weak<Self>>,
     background_tasks: DashMap<TypeId, Vec<JoinHandle<Result<(), BoxedError>>>>,
 }
 
-impl ServiceManager {
-    //TODO: Do not take services on new(), add a manage(service: ServiceHandle) method instead
-    pub async fn new(services: Vec<ServiceHandle>) -> Arc<Self> {
-        let mut services_map: HashMap<TypeId, ServiceHandle> = HashMap::new(); //TODO: Drop type annotation
-
-        //TODO: When Rust allows async closures, refactor this to use iterator methods instead of for loop
-        for service in services.into_iter() {
-            let service_lock = service.lock().await;
-            let service_info = service_lock.info();
-
-            let existing_service = services_map.get(&service_info.type_id);
-            if let Some(existing_service) = existing_service {
-                let existing_service_lock = existing_service.lock().await;
-                let existing_service_info = existing_service_lock.info();
-
-                warn!(
-                    "ServiceManager::new() was given service {} ({}), which has the same TypeId as service {} ({}). This is not allowed. The service {} ({}) will be ignored.",
-                    service_info.name,
-                    service_info.type_name,
-                    existing_service_info.name,
-                    existing_service_info.type_name,
-                    service_info.name,
-                    service_info.type_name
-                );
-                continue;
-            }
-
-            services_map.insert(service_info.type_id, service.clone());
-        }
-
-        let service_manager = ServiceManager {
-            weak: OnceLock::new(),
-            services: services_map,
-            background_tasks: DashMap::new(),
-            on_status_change: Arc::new(EventRepeater::new("ServiceManager::on_status_change")),
-        };
-
-        let arc = Arc::new(service_manager);
-        let weak = Arc::downgrade(&Arc::clone(&arc));
-
-        let result = arc.weak.set(weak);
-        if result.is_err() {
-            error_unreachable!(
-                "Failed to set ServiceManager's Weak self-reference because it was already set. This should never happen. Panicking to prevent further undefined behavior."
-            );
-        }
-
-        arc
-    }
-
-    pub fn get_weak(&self) -> Weak<Self> {
-        match self.weak.get() {
-            Some(weak) => weak.clone(),
-            None => {
-                error_panic!(
-                    "ServiceManager's Weak self-reference was None when trying to access it. This should never happen. Panicking to prevent further undefined behavior."
-                );
-            }
-        }
-    }
-
-    pub async fn start_service(&self, service: ServiceHandle) -> Result<(), StartupError> {
+impl ServiceManagerInner {
+    pub async fn start_service(
+        &self,
+        service: ServiceHandle,
+        handle: ServiceManagerHandle,
+    ) -> Result<(), StartupError> {
         let mut service_lock = service.lock().await;
 
         let service_info = service_lock.info();
@@ -197,10 +155,25 @@ impl ServiceManager {
             ));
         }
 
-        self.init_service(&mut service_lock).await?;
+        self.init_service(&mut service_lock, handle).await?;
         info!("Started service {}", service_lock.info().name); // Reacquiring to allow above mutable borrow
 
         Ok(())
+    }
+
+    pub async fn start_services(
+        &self,
+        handle: ServiceManagerHandle,
+    ) -> Vec<Result<(), StartupError>> {
+        let mut results = Vec::new();
+        for pair in &self.services {
+            let service = pair.1.clone();
+            let result = self.start_service(service, handle.clone()).await;
+
+            results.push(result);
+        }
+
+        results
     }
 
     pub async fn stop_service(&self, service: ServiceHandle) -> Result<(), ShutdownError> {
@@ -240,18 +213,6 @@ impl ServiceManager {
         info!("Stopped service {}", service_info.name);
 
         Ok(())
-    }
-
-    pub async fn start_services(&self) -> Vec<Result<(), StartupError>> {
-        let mut results = Vec::new();
-        for pair in &self.services {
-            let service = pair.1.clone();
-            let result = self.start_service(service).await;
-
-            results.push(result);
-        }
-
-        results
     }
 
     pub async fn stop_services(&self) -> Vec<Result<(), ShutdownError>> {
@@ -442,11 +403,10 @@ impl ServiceManager {
     async fn init_service(
         &self,
         service: &mut MutexGuard<'_, Box<DynService<'static>>>,
+        handle: ServiceManagerHandle,
     ) -> Result<(), StartupError> {
-        let service_manager = self.get_weak();
-
         service.info_mut().status.set(Status::Starting).await;
-        let start = service.start(service_manager);
+        let start = service.start(handle);
         let timeout_result = timeout(Duration::from_secs(10), start).await; //TODO: Add to config instead of hardcoding duration
 
         //TODO: Merge all cases into enum with variants "Ok", "Err", and "Timeout"
@@ -559,6 +519,7 @@ impl ServiceManager {
         &self,
         service_info: &ServiceInfo,
         task: LifetimedPinnedBoxedFutureResult<'static, ()>,
+        handle: ServiceManagerHandle,
     ) -> Result<(), RunTaskError> {
         // We're cloning these values to move them into the task's closure
         // Otherwise, we would reference service_info and get lifetime issues
@@ -574,13 +535,12 @@ impl ServiceManager {
             ));
         }
 
-        let service_manager_weak = self.get_weak();
         let mut taskchain = Taskchain::new(task);
         //TODO: When Rust allows async closures, refactor this to have the "async" keyword after the "move" keyword
         taskchain.append(move |result| async move {
-            let service_manager_weak = service_manager_weak;
-            let service_manager = match service_manager_weak.upgrade() {
-                Some(arc) => arc,
+            let handle = handle;
+            let inner = match handle.inner.upgrade() {
+                Some(inner) => inner,
                 None => {
                     error_panic!(
                         "A task of a service {service_name} ({service_type_name}) unexpectedly ended, but cannot mark service as failed because its corresponding ServiceManager was already dropped. Panicking to prevent further undefined behavior."
@@ -588,7 +548,7 @@ impl ServiceManager {
                 }
             };
 
-            let service = match service_manager.get_service(&service_type_id) {
+            let service = match inner.get_service(&service_type_id) {
                 Some(service) => service,
                 None => {
                     error_panic!(
@@ -603,7 +563,7 @@ impl ServiceManager {
                         "A task of service {service_name} ({service_type_name}) ended unexpectedly! Service will be marked as failed."
                     );
 
-                    service_manager.fail_service(service, "Background task ended unexpectedly!").await;
+                    inner.fail_service(service, "Background task ended unexpectedly!").await;
                 }
 
                 Err(error) => {
@@ -611,7 +571,7 @@ impl ServiceManager {
                         "A task of service {service_name} ({service_type_name}) ended with error: {error}. Service will be marked as failed.",
                     );
 
-                    service_manager.fail_service(service, error.to_string()).await;
+                    inner.fail_service(service, error.to_string()).await;
                 }
             }
             Ok(())
@@ -645,7 +605,7 @@ impl ServiceManager {
     }
 }
 
-impl Display for ServiceManager {
+impl Display for ServiceManagerInner {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Services: ")?;
 
@@ -665,5 +625,344 @@ impl Display for ServiceManager {
             }
         }
         Ok(())
+    }
+}
+
+#[derive(Clone)]
+pub struct ServiceManagerHandle {
+    inner: Weak<ServiceManagerInner>,
+}
+
+impl ServiceManagerHandle {
+    pub fn is_dropped(&self) -> bool {
+        self.inner.strong_count() == 0
+    }
+
+    pub fn try_with<R>(
+        &self,
+        func: impl FnOnce(&ServiceManagerInner) -> R,
+    ) -> Result<R, ServiceManagerHandleError> {
+        let inner = self
+            .inner
+            .upgrade()
+            .ok_or(ServiceManagerHandleError::ServiceManagerDropped)?;
+
+        let result = func(&inner);
+        Ok(result)
+    }
+
+    pub async fn try_with_async<R>(
+        &self,
+        func: impl AsyncFnOnce(&ServiceManagerInner) -> R,
+    ) -> Result<R, ServiceManagerHandleError> {
+        let inner = self
+            .inner
+            .upgrade()
+            .ok_or(ServiceManagerHandleError::ServiceManagerDropped)?;
+
+        let result = func(&inner).await;
+        Ok(result)
+    }
+
+    pub async fn start_service(&self, service: ServiceHandle) -> Result<(), StartupError> {
+        let inner = self
+            .inner
+            .upgrade()
+            .ok_or(StartupError::ServiceManagerDropped)?;
+
+        inner.start_service(service, self.clone()).await
+    }
+
+    pub async fn start_services(
+        &self,
+    ) -> Result<Vec<Result<(), StartupError>>, ServiceManagerHandleError> {
+        let inner = self
+            .inner
+            .upgrade()
+            .ok_or(ServiceManagerHandleError::ServiceManagerDropped)?;
+
+        let result = inner.start_services(self.clone()).await;
+        Ok(result)
+    }
+
+    pub async fn stop_service(&self, service: ServiceHandle) -> Result<(), ShutdownError> {
+        let inner = self
+            .inner
+            .upgrade()
+            .ok_or(ShutdownError::ServiceManagerDropped)?;
+
+        inner.stop_service(service).await
+    }
+
+    pub async fn stop_services(
+        &self,
+    ) -> Result<Vec<Result<(), ShutdownError>>, ServiceManagerHandleError> {
+        let inner = self
+            .inner
+            .upgrade()
+            .ok_or(ServiceManagerHandleError::ServiceManagerDropped)?;
+
+        let result = inner.stop_services().await;
+        Ok(result)
+    }
+
+    pub async fn run_task(
+        &self,
+        service_info: &ServiceInfo,
+        task: LifetimedPinnedBoxedFutureResult<'static, ()>,
+    ) -> Result<(), RunTaskError> {
+        let inner = self
+            .inner
+            .upgrade()
+            .ok_or(RunTaskError::ServiceManagerDropped)?;
+
+        inner.run_task(service_info, task, self.clone()).await
+    }
+
+    pub async fn get_service_by_type<T: Service + 'static>(
+        &self,
+    ) -> Result<Option<ServiceHandle>, ServiceManagerHandleError> {
+        let inner = self
+            .inner
+            .upgrade()
+            .ok_or(ServiceManagerHandleError::ServiceManagerDropped)?;
+
+        let result = inner.get_service_by_type::<T>().await;
+        Ok(result)
+    }
+
+    pub async fn with_service<T: Service + 'static, R>(
+        &self,
+        f: impl FnOnce(&mut T) -> R,
+    ) -> Result<Option<R>, ServiceManagerHandleError> {
+        let inner = self
+            .inner
+            .upgrade()
+            .ok_or(ServiceManagerHandleError::ServiceManagerDropped)?;
+
+        let result = inner.with_service(f).await;
+        Ok(result)
+    }
+
+    pub async fn with_service_async<T: Service + 'static, R, F: Future<Output = R>>(
+        &self,
+        f: impl FnOnce(&mut T) -> F,
+    ) -> Result<Option<R>, ServiceManagerHandleError> {
+        let inner = self
+            .inner
+            .upgrade()
+            .ok_or(ServiceManagerHandleError::ServiceManagerDropped)?;
+
+        let result = inner.with_service_async(f).await;
+        Ok(result)
+    }
+
+    pub fn get_service(
+        &self,
+        type_id: &TypeId,
+    ) -> Result<Option<ServiceHandle>, ServiceManagerHandleError> {
+        self.try_with(|inner| inner.get_service(type_id))
+    }
+
+    pub fn manages_service_by_type_id(
+        &self,
+        type_id: &TypeId,
+    ) -> Result<bool, ServiceManagerHandleError> {
+        self.try_with(|inner| inner.manages_service_by_type_id(type_id))
+    }
+
+    pub async fn manages_service(
+        &self,
+        service: &ServiceHandle,
+    ) -> Result<bool, ServiceManagerHandleError> {
+        let inner = self
+            .inner
+            .upgrade()
+            .ok_or(ServiceManagerHandleError::ServiceManagerDropped)?;
+
+        let result = inner.manages_service(service).await;
+        Ok(result)
+    }
+
+    pub fn has_background_tasks_by_type_id(
+        &self,
+        type_id: &TypeId,
+    ) -> Result<bool, ServiceManagerHandleError> {
+        self.try_with(|inner| inner.has_background_tasks_by_type_id(type_id))
+    }
+
+    pub fn has_background_tasks_by_mutex_guard(
+        &self,
+        service: &MutexGuard<'_, Box<DynService<'static>>>,
+    ) -> Result<bool, ServiceManagerHandleError> {
+        self.try_with(|inner| inner.has_background_tasks_by_mutex_guard(service))
+    }
+
+    pub async fn has_background_tasks(
+        &self,
+        service: &ServiceHandle,
+    ) -> Result<bool, ServiceManagerHandleError> {
+        let inner = self
+            .inner
+            .upgrade()
+            .ok_or(ServiceManagerHandleError::ServiceManagerDropped)?;
+
+        let result = inner.has_background_tasks(service).await;
+        Ok(result)
+    }
+
+    pub async fn health(&self) -> Result<Health, ServiceManagerHandleError> {
+        let inner = self
+            .inner
+            .upgrade()
+            .ok_or(ServiceManagerHandleError::ServiceManagerDropped)?;
+
+        let result = inner.health().await;
+        Ok(result)
+    }
+
+    pub async fn status_overview(&self) -> Result<String, ServiceManagerHandleError> {
+        let inner = self
+            .inner
+            .upgrade()
+            .ok_or(ServiceManagerHandleError::ServiceManagerDropped)?;
+
+        let result = inner.status_overview().await;
+        Ok(result)
+    }
+}
+
+pub struct ServiceManager {
+    inner: Arc<ServiceManagerInner>,
+}
+
+impl ServiceManager {
+    //TODO: Do not take services on new(), add a manage(service: ServiceHandle) method instead
+    pub async fn new(services: Vec<ServiceHandle>) -> Self {
+        let mut services_map: HashMap<TypeId, ServiceHandle> = HashMap::new(); //TODO: Drop type annotation
+
+        //TODO: When Rust allows async closures, refactor this to use iterator methods instead of for loop
+        for service in services.into_iter() {
+            let service_lock = service.lock().await;
+            let service_info = service_lock.info();
+
+            let existing_service = services_map.get(&service_info.type_id);
+            if let Some(existing_service) = existing_service {
+                let existing_service_lock = existing_service.lock().await;
+                let existing_service_info = existing_service_lock.info();
+
+                warn!(
+                    "ServiceManager::new() was given service {} ({}), which has the same TypeId as service {} ({}). This is not allowed. The service {} ({}) will be ignored.",
+                    service_info.name,
+                    service_info.type_name,
+                    existing_service_info.name,
+                    existing_service_info.type_name,
+                    service_info.name,
+                    service_info.type_name
+                );
+                continue;
+            }
+
+            services_map.insert(service_info.type_id, service.clone());
+        }
+
+        let inner = ServiceManagerInner {
+            services: services_map,
+            background_tasks: DashMap::new(),
+            on_status_change: Arc::new(EventRepeater::new("ServiceManager::on_status_change")),
+        };
+
+        Self {
+            inner: Arc::new(inner),
+        }
+    }
+
+    pub fn handle(&self) -> ServiceManagerHandle {
+        ServiceManagerHandle {
+            inner: Arc::downgrade(&self.inner),
+        }
+    }
+
+    pub async fn start_service(&self, service: ServiceHandle) -> Result<(), StartupError> {
+        self.inner.start_service(service, self.handle()).await
+    }
+
+    pub async fn start_services(&self) -> Vec<Result<(), StartupError>> {
+        self.inner.start_services(self.handle()).await
+    }
+
+    pub async fn stop_service(&self, service: ServiceHandle) -> Result<(), ShutdownError> {
+        self.inner.stop_service(service).await
+    }
+
+    pub async fn stop_services(&self) -> Vec<Result<(), ShutdownError>> {
+        self.inner.stop_services().await
+    }
+
+    pub async fn run_task(
+        &self,
+        service_info: &ServiceInfo,
+        task: LifetimedPinnedBoxedFutureResult<'static, ()>,
+    ) -> Result<(), RunTaskError> {
+        self.inner.run_task(service_info, task, self.handle()).await
+    }
+
+    pub async fn get_service_by_type<T: Service + 'static>(&self) -> Option<ServiceHandle> {
+        self.inner.get_service_by_type::<T>().await
+    }
+
+    pub async fn with_service<T: Service + 'static, R>(
+        &self,
+        f: impl FnOnce(&mut T) -> R,
+    ) -> Option<R> {
+        self.inner.with_service(f).await
+    }
+
+    pub async fn with_service_async<T: Service + 'static, R, F: Future<Output = R>>(
+        &self,
+        f: impl FnOnce(&mut T) -> F,
+    ) -> Option<R> {
+        self.inner.with_service_async(f).await
+    }
+
+    pub fn get_service(&self, type_id: &TypeId) -> Option<ServiceHandle> {
+        self.inner.get_service(type_id)
+    }
+
+    pub fn manages_service_by_type_id(&self, type_id: &TypeId) -> bool {
+        self.inner.manages_service_by_type_id(type_id)
+    }
+
+    pub async fn manages_service(&self, service: &ServiceHandle) -> bool {
+        self.inner.manages_service(service).await
+    }
+
+    pub fn has_background_tasks_by_type_id(&self, type_id: &TypeId) -> bool {
+        self.inner.has_background_tasks_by_type_id(type_id)
+    }
+
+    pub fn has_background_tasks_by_mutex_guard(
+        &self,
+        service: &MutexGuard<'_, Box<DynService<'static>>>,
+    ) -> bool {
+        self.inner.has_background_tasks_by_mutex_guard(service)
+    }
+
+    pub async fn has_background_tasks(&self, service: &ServiceHandle) -> bool {
+        self.inner.has_background_tasks(service).await
+    }
+
+    pub async fn health(&self) -> Health {
+        self.inner.health().await
+    }
+
+    pub async fn status_overview(&self) -> String {
+        self.inner.status_overview().await
+    }
+}
+
+impl Display for ServiceManager {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.inner, f)
     }
 }

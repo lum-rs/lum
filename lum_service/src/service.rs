@@ -4,14 +4,13 @@ use std::{
     cmp::Ordering,
     fmt::Display,
     future::Future,
-    sync::Weak,
 };
 
 use dynosaur::dynosaur;
 use lum_boxtypes::BoxedError;
 use lum_event::Observable;
 
-use super::service_manager::ServiceManager;
+use super::service_manager::ServiceManagerHandle;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
 pub enum Priority {
@@ -127,7 +126,7 @@ pub trait Service: Send + Sync {
 
     fn start(
         &mut self,
-        service_manager: Weak<ServiceManager>,
+        service_manager: ServiceManagerHandle,
     ) -> impl Future<Output = Result<(), BoxedError>> + Send + '_;
     fn stop(&mut self) -> impl Future<Output = Result<(), BoxedError>> + Send + '_;
 
