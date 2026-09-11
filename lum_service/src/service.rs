@@ -75,7 +75,7 @@ pub trait Service: Send + Sync {
     ) -> impl Future<Output = Result<(), BoxedError>> + Send + '_;
     fn stop(&mut self) -> impl Future<Output = Result<(), BoxedError>> + Send + '_;
 
-    fn fail(&mut self, _message: &str) -> impl Future<Output = ()> + Send + Sync {
+    fn fail(&mut self, _message: &str) -> impl Future<Output = ()> + Send {
         Box::pin(async move {})
     }
 
