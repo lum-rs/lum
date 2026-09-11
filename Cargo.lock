@@ -1361,9 +1361,7 @@ dependencies = [
 name = "lum_service"
 version = "0.4.0"
 dependencies = [
- "async-trait",
  "dashmap 6.2.1",
- "downcast-rs",
  "dynosaur",
  "lum_boxtypes",
  "lum_event",
