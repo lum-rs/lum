@@ -125,9 +125,6 @@ pub trait Service: Send + Sync {
     fn info(&self) -> &ServiceInfo;
     fn info_mut(&mut self) -> &mut ServiceInfo;
 
-    fn as_any(&self) -> &dyn any::Any;
-    fn as_any_mut(&mut self) -> &mut dyn any::Any;
-
     fn start(
         &mut self,
         service_manager: Weak<ServiceManager>,
@@ -141,6 +138,9 @@ pub trait Service: Send + Sync {
     fn is_available(&self) -> bool {
         self.info().status.get() == Status::Started
     }
+
+    fn as_any(&self) -> &dyn any::Any;
+    fn as_any_mut(&mut self) -> &mut dyn any::Any;
 }
 
 impl DynService<'_> {

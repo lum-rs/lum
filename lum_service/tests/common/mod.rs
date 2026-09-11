@@ -46,14 +46,6 @@ impl Service for DummyService {
         &mut self.info
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-
     async fn start(&mut self, service_manager: Weak<ServiceManager>) -> Result<(), BoxedError> {
         info!("Starting DummyService");
 
@@ -108,6 +100,14 @@ impl Service for DummyService {
 
     async fn fail(&mut self, message: &str) {
         info!("DummyService failed: {}", message);
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 
