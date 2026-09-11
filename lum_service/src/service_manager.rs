@@ -102,12 +102,6 @@ pub enum RunTaskError {
     ServiceManagerDropped,
 }
 
-#[derive(Debug, Error)]
-pub enum ServiceManagerHandleError {
-    #[error("The ServiceManager has been dropped.")]
-    ServiceManagerDropped,
-}
-
 pub struct ServiceManagerInner {
     pub services: HashMap<TypeId, ServiceHandle>,
     pub on_status_change: Arc<EventRepeater<Status>>,
@@ -626,6 +620,12 @@ impl Display for ServiceManagerInner {
         }
         Ok(())
     }
+}
+
+#[derive(Debug, Error)]
+pub enum ServiceManagerHandleError {
+    #[error("The ServiceManager has been dropped.")]
+    ServiceManagerDropped,
 }
 
 #[derive(Clone)]
