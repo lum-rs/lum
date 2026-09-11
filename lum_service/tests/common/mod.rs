@@ -8,9 +8,8 @@ use lum_boxtypes::BoxedError;
 use lum_event::Event;
 use lum_log::info;
 use lum_service::{
-    service::{DynService, Service, ServiceInfo},
+    service::{DynService, Priority, Service, ServiceInfo},
     service_manager::ServiceManager,
-    types::Priority,
 };
 use tokio::{sync::Mutex, time::sleep};
 

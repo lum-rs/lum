@@ -1,19 +1,24 @@
 use dashmap::DashMap;
 use lum_boxtypes::{BoxedError, LifetimedPinnedBoxedFutureResult};
-use lum_event::EventRepeater;
+use lum_event::{
+    EventRepeater,
+    event_repeater::{AttachError, DetachError},
+};
 use lum_log::{error, error_panic, error_unreachable, info, warn};
-use tokio::{spawn, sync::MutexGuard, task::JoinHandle, time::timeout};
+use thiserror::Error;
+use tokio::{
+    spawn,
+    sync::{Mutex, MutexGuard},
+    task::JoinHandle,
+    time::timeout,
+};
 
 use crate::{
-    service::ServiceInfo,
+    service::{Priority, ServiceInfo, Status},
     taskchain::Taskchain,
-    types::{RunTaskError, ServiceHandle},
 };
 
-use super::{
-    service::{DynService, Service},
-    types::{Health, Priority, ShutdownError, StartupError, Status},
-};
+use super::service::{DynService, Service};
 
 use std::{
     any::TypeId,
@@ -23,6 +28,70 @@ use std::{
     sync::{Arc, OnceLock, Weak},
     time::Duration,
 };
+
+pub type ServiceHandle = Arc<Mutex<Box<DynService<'static>>>>;
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
+pub enum Health {
+    Healthy,
+    Unhealthy,
+}
+
+impl Display for Health {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Health::Healthy => write!(f, "Healthy"),
+            Health::Unhealthy => write!(f, "Unhealthy"),
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum StartupError {
+    #[error("Service {0} ({1}) is not managed by this Service Manager")]
+    ServiceNotManaged(String, String),
+
+    #[error("Service {0} ({1}) is not stopped")]
+    ServiceNotStopped(String, String),
+
+    //TODO: BackgroundTaskRunning(String, String, int32): Service {0} ({1}) has {2} background tasks running
+    #[error("Service {0} ({1}) already has a background task running")]
+    BackgroundTaskAlreadyRunning(String, String),
+
+    #[error(
+        "Failed to attach Service Manager's status_change EventRepeater to {0} ({1})'s status_change Event: {2}"
+    )]
+    StatusAttachmentFailed(String, String, AttachError),
+
+    #[error("Service {0} ({1}) failed to start")]
+    FailedToStartService(String, String),
+}
+
+#[derive(Debug, Error)]
+pub enum ShutdownError {
+    #[error("Service {0} ({1}) is not managed by this Service Manager")]
+    ServiceNotManaged(String, String),
+
+    #[error("Service {0} ({1}) is not started")]
+    ServiceNotStarted(String, String),
+
+    #[error("Service {0} ({1}) failed to stop")]
+    FailedToStopService(String, String),
+
+    #[error(
+        "Failed to detach Service Manager's status_change EventRepeater from {0} ({1})'s status_change Event: {2}"
+    )]
+    StatusDetachmentFailed(String, String, DetachError),
+}
+
+#[derive(Debug, Error)]
+pub enum RunTaskError {
+    #[error("Service {0} ({1}) is not started or currently starting")]
+    ServiceNotStarted(String, String),
+
+    #[error("Service {0} ({1}) is not managed by this Service Manager")]
+    ServiceNotManaged(String, String),
+}
 
 pub struct ServiceManager {
     pub services: HashMap<TypeId, ServiceHandle>,

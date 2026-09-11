@@ -1,6 +1,8 @@
+use core::fmt;
 use std::{
     any::{self, TypeId},
     cmp::Ordering,
+    fmt::Display,
     future::Future,
     sync::Weak,
 };
@@ -9,10 +11,67 @@ use dynosaur::dynosaur;
 use lum_boxtypes::BoxedError;
 use lum_event::Observable;
 
-use super::{
-    service_manager::ServiceManager,
-    types::{Priority, Status},
-};
+use super::service_manager::ServiceManager;
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
+pub enum Priority {
+    Essential,
+    Optional,
+}
+
+impl Display for Priority {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Priority::Essential => write!(f, "Essential"),
+            Priority::Optional => write!(f, "Optional"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Status {
+    Starting,
+    Started,
+    Stopping,
+    Stopped,
+    FailedToStart(String),
+    FailedToStop(String),
+    Failing,
+    RuntimeError(String),
+}
+
+impl Display for Status {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Status::Starting => write!(f, "Starting"),
+            Status::Started => write!(f, "Started"),
+            Status::Stopping => write!(f, "Stopping"),
+            Status::Stopped => write!(f, "Stopped"),
+            Status::FailedToStart(error) => write!(f, "Failed to start: {error}"),
+            Status::FailedToStop(error) => write!(f, "Failed to stop: {error}"),
+            Status::Failing => write!(f, "Failing"),
+            Status::RuntimeError(error) => write!(f, "Runtime error: {error}"),
+        }
+    }
+}
+
+impl PartialEq for Status {
+    fn eq(&self, other: &Self) -> bool {
+        matches!(
+            (self, other),
+            (Status::Starting, Status::Starting)
+                | (Status::Started, Status::Started)
+                | (Status::Stopping, Status::Stopping)
+                | (Status::Stopped, Status::Stopped)
+                | (Status::FailedToStart(_), Status::FailedToStart(_))
+                | (Status::FailedToStop(_), Status::FailedToStop(_))
+                | (Status::Failing, Status::Failing)
+                | (Status::RuntimeError(_), Status::RuntimeError(_))
+        )
+    }
+}
+
+impl Eq for Status {}
 
 #[derive(Debug)]
 pub struct ServiceInfo {
